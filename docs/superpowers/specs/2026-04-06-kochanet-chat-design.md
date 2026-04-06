@@ -298,7 +298,7 @@ create policy cm_delete_self on channel_members for delete using (user_id = app_
 create policy cm_update_own  on channel_members for update
   using (user_id = app_user_id()) with check (user_id = app_user_id());
 
--- channels: visible if you're a member (or it's public AND we let unauthenticated discovery)
+-- channels: any authenticated user can see public channels (for discovery); private channels require membership
 create policy channels_select_member on channels for select using (
   exists (
     select 1 from channel_members
@@ -399,14 +399,22 @@ Server-side regex `\b@ai\b` (case-insensitive, word-boundary so "saying" doesn't
 // server/messages.ts (sketch)
 'use server'
 import { after } from 'next/server'
+import { headers } from 'next/headers'
+import { auth } from '@/lib/auth/better-auth'
+import { createClient } from '@/lib/supabase/server'
+import { serviceRoleClient } from '@/lib/supabase/service-role'
 import { invokeAI } from '@/lib/ai/stream-response'
+import { checkAIRateLimit } from '@/server/ai'
 
 export async function sendMessage(input: { channelId: string; body: string; clientId: string }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser() // returns the JWT user
-  if (!user) throw new Error('unauthorized')
+  // Authn comes from BetterAuth, not Supabase Auth
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session) throw new Error('unauthorized')
+  const user = session.user
 
-  // 1. Insert the user's message
+  const supabase = await createClient() // attaches minted Supabase JWT automatically
+
+  // 1. Insert the user's message via the user's JWT — RLS enforces membership
   const { data: userMsg, error: e1 } = await supabase
     .from('messages')
     .insert({
@@ -420,9 +428,9 @@ export async function sendMessage(input: { channelId: string; body: string; clie
     .single()
   if (e1) throw e1
 
-  // 2. If @ai is mentioned, insert the placeholder AND schedule the streaming
+  // 2. If @ai is mentioned, rate-limit, insert the placeholder, schedule the stream
   if (/\b@ai\b/i.test(input.body)) {
-    await checkAIRateLimit(user.id)  // throws if exceeded
+    await checkAIRateLimit(user.id) // throws RateLimitError if exceeded
 
     const { data: placeholder, error: e2 } = await serviceRoleClient()
       .from('messages')
@@ -438,16 +446,20 @@ export async function sendMessage(input: { channelId: string; body: string; clie
       .single()
     if (e2) throw e2
 
-    after(() => invokeAI({
-      channelId: input.channelId,
-      placeholderId: placeholder.id,
-      invokerName: user.name,
-    }))
+    after(() =>
+      invokeAI({
+        channelId: input.channelId,
+        placeholderId: placeholder.id,
+        invokerName: user.name,
+      })
+    )
   }
 
   return { ok: true, message: userMsg }
 }
 ```
+
+The important thing here is that **the user message insert goes through the user-scoped Supabase client** (so RLS enforces that the user is a member of the channel), while **the AI placeholder insert goes through the service-role client** (because the AI has no JWT and must bypass RLS). Two different clients, two different trust levels, in the same server action.
 
 The `after()` call schedules the streaming continuation to run **after** the server action returns its response to the client, but inside the same serverless function invocation. Vercel's fluid compute keeps the function alive long enough for the streaming work to finish. The user's browser sees its own message echo and the empty AI placeholder almost immediately (~100–300ms after sending), and then the placeholder body starts filling in shortly after.
 
@@ -527,8 +539,13 @@ Tradeoff: ~30–50 DB writes per AI response (one per batch). Acceptable for a t
 
 ```typescript
 // lib/ai/build-context.ts
+import { serviceRoleClient } from '@/lib/supabase/service-role'
+import { SYSTEM_PROMPT } from './system-prompt'
+
 export async function buildContext(channelId: string, invokerName: string) {
   const supabase = serviceRoleClient()
+
+  // 1. Last 30 messages in the channel
   const { data: rows } = await supabase
     .from('messages')
     .select('author_kind, author_id, body, ai_status')
@@ -536,27 +553,47 @@ export async function buildContext(channelId: string, invokerName: string) {
     .order('created_at', { ascending: false })
     .limit(30)
 
-  const messages = (rows ?? []).reverse().map((row) => {
-    if (row.author_kind === 'ai') {
-      // Skip placeholder and error rows; only complete AI responses count
-      return row.ai_status === 'complete'
-        ? { role: 'assistant' as const, content: row.body }
-        : null
-    }
-    return {
-      role: 'user' as const,
-      content: `${displayName(row.author_id)}: ${row.body}`,
-    }
-  }).filter(Boolean)
+  const ordered = (rows ?? []).reverse()
+
+  // 2. Resolve author display names in one batch query against BetterAuth's user table
+  //    (BetterAuth stores its users in public.user, same schema — no cross-schema join)
+  const authorIds = [...new Set(
+    ordered.filter(r => r.author_kind === 'user' && r.author_id).map(r => r.author_id!)
+  )]
+  const { data: users } = await supabase
+    .from('user')                                 // BetterAuth's user table
+    .select('id, name')
+    .in('id', authorIds)
+  const nameById = new Map(users?.map(u => [u.id, u.name]) ?? [])
+  const displayName = (id: string | null) => (id && nameById.get(id)) || 'Unknown'
+
+  // 3. Format for OpenAI
+  const messages = ordered
+    .map((row) => {
+      if (row.author_kind === 'ai') {
+        // Skip placeholder/error/in-flight rows; only include completed AI responses
+        return row.ai_status === 'complete'
+          ? { role: 'assistant' as const, content: row.body }
+          : null
+      }
+      return {
+        role: 'user' as const,
+        content: `${displayName(row.author_id)}: ${row.body}`,
+      }
+    })
+    .filter((m): m is NonNullable<typeof m> => m !== null)
+
+  // 4. System prompt includes the invoker's name so the AI can address them directly
+  const system = `${SYSTEM_PROMPT}\n\nYou were just summoned by ${invokerName}. Address your response to them when it makes sense.`
 
   return [
-    { role: 'system' as const, content: SYSTEM_PROMPT },
+    { role: 'system' as const, content: system },
     ...messages,
   ]
 }
 ```
 
-The author-name prefix on user messages is the trick that lets the AI understand who said what without restructuring the OpenAI message format. It also lets the AI naturally address people: "Alice, you mentioned Docker networking earlier..."
+The author-name prefix on user messages is the trick that lets the AI understand who said what without restructuring the OpenAI message format. Combined with the invoker's name in the system prompt, it lets the AI naturally address people: "Alice, you mentioned Docker networking earlier..."
 
 System prompt (rough draft, refined during implementation):
 
@@ -621,7 +658,7 @@ AI messages render with the **same shape** as human messages. Only two things di
 1. The **gradient avatar** (`#ADB6C4 → #7d8a9c`) with a `✦` glyph instead of an initial.
 2. The **author name** rendered as `ai` in bold white instead of a normal sender name.
 
-No background tint, no border, no badge. This treats the AI as a peer teammate, not a banner UI element. The brief asks for AI to be "visually distinguished" from human messages — the avatar shape and the lowercase italic-feeling `ai` name accomplish that without breaking conversational flow.
+No background tint, no border, no badge. This treats the AI as a peer teammate, not a banner UI element. The brief asks for AI to be "visually distinguished" from human messages — the gradient avatar with the `✦` glyph and the bold white lowercase `ai` name accomplish that without breaking conversational flow.
 
 ### 9.3 AI lifecycle states
 
@@ -862,7 +899,7 @@ Run with `pnpm tsx supabase/seed.ts`.
 | OpenAI stream interruption mid-response | The error branch in `invokeAI` writes a fallback body and `ai_status='error'`. The browser sees the same UPDATE event and renders the retry affordance. |
 | Race when two clients send a message at the same millisecond | Composite index `(channel_id, created_at desc, id desc)` provides deterministic ordering via the `id desc` tiebreak. |
 | RLS bypass for AI inserts via service-role client is a privilege boundary | Isolated in one file (`lib/supabase/service-role.ts`) which is only imported by `lib/ai/stream-response.ts`. Code review focuses on this single path. |
-| Markdown rendering during incomplete code fences | `react-markdown` handles partial input gracefully — open fences just render as best-effort and complete on the next batch. Verified during prototyping. |
+| Markdown rendering during incomplete code fences | `react-markdown` is designed to handle partial input — open fences render as best-effort and complete on the next batch. We'll sanity-check this during implementation; if it proves unacceptable, fallback is to defer rendering until the first newline-closed block and render plaintext in between. |
 
 ---
 
