@@ -1,0 +1,27 @@
+# Visual brainstorming companion (transient mockups)
+.superpowers/
+
+# Node / Next.js (anticipated)
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
