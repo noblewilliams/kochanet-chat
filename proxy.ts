@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 const PUBLIC_PATHS = ['/sign-in', '/sign-up']
 const AUTH_COOKIE_NAME = 'better-auth.session_token'
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Skip static assets and auth API
