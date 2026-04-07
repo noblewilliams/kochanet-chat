@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import type { MessageRow } from '@/lib/supabase/types'
+import { Composer } from './composer'
 
 type Member = { id: string; name: string }
 type Channel = { id: string; name: string; type: 'public' | 'private' }
@@ -55,9 +56,7 @@ export function ChatView({
         )}
       </div>
 
-      <footer className="border-t border-border bg-bg p-4">
-        <p className="text-center text-xs text-muted">Composer comes in Phase 7.</p>
-      </footer>
+      <Composer channelId={channel.id} />
     </>
   )
 }
