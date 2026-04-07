@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { auth } from '@/lib/auth/better-auth'
 import { createClient } from '@/lib/supabase/server'
+import { serviceRoleClient } from '@/lib/supabase/service-role'
 
 const createChannelSchema = z.object({
   name: z.string().min(1).max(50),
@@ -70,4 +71,33 @@ export async function updateLastRead(channelId: string) {
     .update({ last_read_at: new Date().toISOString() })
     .eq('channel_id', channelId)
     .eq('user_id', session.user.id)
+}
+
+export async function inviteMember(input: { channelId: string; email: string }) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session) throw new Error('unauthorized')
+
+  // Use service role to look up the invitee (BetterAuth's user table is
+  // un-RLS'd, but we go through service role for consistency) and to insert
+  // the membership row on behalf of the invitee (the inviter doesn't have
+  // RLS permission to insert another user's row).
+  const admin = serviceRoleClient()
+
+  const { data: user } = await admin
+    .from('user')
+    .select('id')
+    .eq('email', input.email)
+    .maybeSingle()
+
+  if (!user) {
+    throw new Error('No user with that email. Ask them to sign up first.')
+  }
+
+  const { error } = await admin.from('channel_members').insert({
+    channel_id: input.channelId,
+    user_id: user.id,
+    role: 'member',
+  })
+  // 23505 = already a member; treat as success
+  if (error && error.code !== '23505') throw error
 }

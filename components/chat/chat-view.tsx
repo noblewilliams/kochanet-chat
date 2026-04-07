@@ -7,6 +7,8 @@ import { useConnectionState } from '@/lib/realtime/use-connection-state'
 import { Composer } from './composer'
 import { AIThinking } from './ai-thinking'
 import { AIMessageBody } from './ai-message-body'
+import { ChannelSearch } from './channel-search'
+import { InviteButton } from './invite-button'
 import { TypingIndicator } from '@/components/presence/typing-indicator'
 import { PresenceBar } from '@/components/presence/presence-bar'
 
@@ -67,6 +69,10 @@ export function ChatView({
             channelId={channel.id}
             me={{ userId: currentUser.id, name: currentUser.name }}
           />
+        </div>
+        <div className="flex items-center gap-2">
+          <ChannelSearch channelId={channel.id} />
+          <InviteButton channelId={channel.id} />
         </div>
       </header>
 
