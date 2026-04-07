@@ -28,7 +28,8 @@ The AI's response streams in real time and is visible to every participant in th
 - **OpenAI API** (`gpt-4o-mini`) — required by the brief. Configurable in `lib/ai/openai.ts`.
 - **Tailwind CSS v4** — included with the Next.js 16 scaffold. Design tokens defined as a `@theme` block in `app/globals.css` (v4's CSS-based config style).
 - **`react-markdown` + `remark-gfm` + `rehype-highlight`** — streaming-friendly markdown for AI responses with code-block syntax highlighting.
-- **Web Speech API** — browser-native STT/TTS for voice features. Chosen over OpenAI Whisper to satisfy the brief's voice requirement at minimum cost. **Known limitation: Firefox doesn't support `SpeechRecognition`.**
+- **Voice input — Groq `whisper-large-v3-turbo`** via the OpenAI-compatible audio endpoint (no separate SDK; we reuse the `openai` client with a custom `baseURL`). The Composer captures audio with the browser's `MediaRecorder` API, sends the blob to a server action, and Groq transcribes it in well under a second. Chosen over the Web Speech API because (a) Web Speech doesn't work in Firefox, (b) Groq's Whisper accuracy is significantly higher, and (c) Groq's STT latency is fast enough that the "record-then-transcribe" UX feels nearly as live as in-browser streaming. The chat AI itself still goes through OpenAI (`gpt-4o-mini`) as required by the brief.
+- **Voice output — Web Speech API** (`speechSynthesis`) for the "read aloud" button on completed AI replies. No round-trip cost, no audio storage.
 - **Vercel** — fluid compute is on by default, which enables `after()` from `next/server`. The AI streaming continuation runs inside `after()` — see below.
 
 ## Architecture highlights
@@ -115,7 +116,8 @@ DATABASE_URL=                  # Supabase pooled connection string
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 
-OPENAI_API_KEY=
+OPENAI_API_KEY=                # chat AI (gpt-4o-mini)
+GROQ_API_KEY=                  # voice transcription (whisper-large-v3-turbo)
 ```
 
 ## Local setup
@@ -138,7 +140,7 @@ pnpm dev
 
 ## Known limitations and tradeoffs
 
-- **Voice features use the Web Speech API**, not OpenAI Whisper + TTS. Works in Chrome, Edge, and Safari but not Firefox. No audio file storage, no waveforms, no transcripts.
+- **Voice input uses Groq Whisper** (`whisper-large-v3-turbo`) via a server action that takes a `MediaRecorder` blob and returns the transcript. Works in every modern browser including Firefox. No audio file storage, no waveforms — the audio blob is sent to Groq once and discarded. Voice OUTPUT (the "read aloud" button on AI replies) still uses the browser's `speechSynthesis` API.
 - **Search uses Postgres `ilike`**, no full-text indexing or ranking. Fast enough on the seed dataset. No highlight rendering.
 - **Unread badges update on navigation, not live.** The sidebar is a server component. A live sidebar would need a second realtime subscription. Deferred.
 - **No automated tests for UI components.** Business logic (JWT bridge, mention detection, rate limiter, context builder) has Vitest unit tests (`pnpm test`). UI was smoke-tested manually.
