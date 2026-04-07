@@ -1,14 +1,24 @@
 'use client'
 import { useState, useRef, useTransition } from 'react'
 import { sendMessage } from '@/server/messages'
+import type { ConnectionStatus } from '@/lib/realtime/use-connection-state'
+
+const STATUS_LABEL: Record<ConnectionStatus, { text: string; color: string }> = {
+  connecting: { text: 'connecting', color: 'text-warning' },
+  connected: { text: 'connected', color: 'text-success' },
+  reconnecting: { text: 'reconnecting', color: 'text-warning' },
+  offline: { text: 'offline', color: 'text-warning' },
+}
 
 export function Composer({
   channelId,
+  connStatus = 'connected',
   onOptimisticSend,
   onOptimisticFail,
   onTyping,
 }: {
   channelId: string
+  connStatus?: ConnectionStatus
   onOptimisticSend?: (opts: { clientId: string; body: string }) => void
   onOptimisticFail?: (clientId: string) => void
   onTyping?: () => void
@@ -16,6 +26,7 @@ export function Composer({
   const [value, setValue] = useState('')
   const [pending, start] = useTransition()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const statusLabel = STATUS_LABEL[connStatus]
 
   function handleSend() {
     const body = value.trim()
@@ -93,8 +104,8 @@ export function Composer({
         <span>
           <kbd className="text-accent">↵</kbd> send · <kbd className="text-accent">shift+↵</kbd> newline
         </span>
-        <span id="conn-status" className="text-success">
-          ● connected
+        <span className={statusLabel.color} aria-live="polite">
+          ● {statusLabel.text}
         </span>
       </div>
     </div>

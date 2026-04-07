@@ -3,6 +3,8 @@ import { headers } from 'next/headers'
 import { auth } from '@/lib/auth/better-auth'
 import { createClient } from '@/lib/supabase/server'
 import { ChatView } from '@/components/chat/chat-view'
+import { JoinChannelPrompt } from '@/components/chat/join-channel-prompt'
+import { updateLastRead } from '@/server/channels'
 
 export default async function ChannelPage({
   params,
@@ -22,6 +24,24 @@ export default async function ChannelPage({
     .eq('id', channelId)
     .single()
   if (error || !channel) return notFound()
+
+  const { data: myMembership } = await supabase
+    .from('channel_members')
+    .select('user_id, last_read_at')
+    .eq('channel_id', channelId)
+    .eq('user_id', session.user.id)
+    .maybeSingle()
+
+  if (!myMembership) {
+    if (channel.type === 'public') {
+      return <JoinChannelPrompt channel={channel} />
+    }
+    return notFound()
+  }
+
+  // Capture priorLastReadAt BEFORE bumping it for the "new messages" divider
+  const priorLastReadAt = myMembership.last_read_at
+  await updateLastRead(channelId)
 
   const { data: initialMessages } = await supabase
     .from('messages')
@@ -49,6 +69,7 @@ export default async function ChannelPage({
     <ChatView
       channel={channel}
       initialMessages={messages}
+      priorLastReadAt={priorLastReadAt}
       members={memberList}
       currentUser={{ id: session.user.id, name: session.user.name || session.user.email }}
     />
