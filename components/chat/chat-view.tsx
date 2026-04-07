@@ -5,6 +5,8 @@ import { useMessages } from '@/lib/realtime/use-messages'
 import { useTyping } from '@/lib/realtime/use-typing'
 import { useConnectionState } from '@/lib/realtime/use-connection-state'
 import { Composer } from './composer'
+import { AIThinking } from './ai-thinking'
+import { AIMessageBody } from './ai-message-body'
 import { TypingIndicator } from '@/components/presence/typing-indicator'
 import { PresenceBar } from '@/components/presence/presence-bar'
 
@@ -97,13 +99,15 @@ export function ChatView({
                     </li>
                   )}
                   <li className="flex gap-3">
-                    <div className="h-8 w-8 shrink-0 rounded-full bg-surface grid place-items-center text-xs font-semibold text-accent">
-                      {m.author_kind === 'ai'
-                        ? '✦'
-                        : (nameById.get(m.author_id ?? '') ?? '?')
-                            .slice(0, 1)
-                            .toUpperCase()}
-                    </div>
+                    {m.author_kind === 'ai' ? (
+                      <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-accent to-accent-deep grid place-items-center text-bg font-bold">
+                        ✦
+                      </div>
+                    ) : (
+                      <div className="h-8 w-8 shrink-0 rounded-full bg-surface grid place-items-center text-xs font-semibold text-accent">
+                        {(nameById.get(m.author_id ?? '') ?? '?').slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2">
                         <span className="text-sm font-semibold text-white">
@@ -124,9 +128,20 @@ export function ChatView({
                           <span className="text-[10px] text-warning">failed</span>
                         )}
                       </div>
-                      <div className="mt-0.5 text-sm text-accent whitespace-pre-wrap break-words">
-                        {m.body}
-                      </div>
+                      {m.author_kind === 'ai' ? (
+                        m.ai_status === 'streaming' && m.body === '' ? (
+                          <AIThinking messageId={m.id} />
+                        ) : (
+                          <AIMessageBody
+                            body={m.body}
+                            isStreaming={m.ai_status === 'streaming'}
+                          />
+                        )
+                      ) : (
+                        <div className="mt-0.5 text-sm text-accent whitespace-pre-wrap break-words">
+                          {m.body}
+                        </div>
+                      )}
                     </div>
                   </li>
                 </Fragment>

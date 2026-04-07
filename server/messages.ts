@@ -1,8 +1,16 @@
 'use server'
 import { headers } from 'next/headers'
+import { after } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/lib/auth/better-auth'
 import { createClient } from '@/lib/supabase/server'
+import { serviceRoleClient } from '@/lib/supabase/service-role'
+import { mentionsAI } from '@/lib/utils/mention'
+import { checkAIRateLimit, RateLimitError } from './ai'
+import { invokeAI } from '@/lib/ai/stream-response'
+
+// Re-export so the Composer can branch on the error name
+export { RateLimitError }
 
 const sendMessageSchema = z.object({
   channelId: z.string().uuid(),
@@ -23,6 +31,7 @@ export async function sendMessage(input: {
 
   const supabase = await createClient()
 
+  // 1. Insert the user's message via the user's JWT — RLS enforces membership
   const { data: userMsg, error } = await supabase
     .from('messages')
     .insert({
@@ -36,8 +45,33 @@ export async function sendMessage(input: {
     .single()
   if (error) throw error
 
-  // AI branch is added in Phase 11 — @ai detection, placeholder insert,
-  // after() scheduling
+  // 2. If @ai is mentioned, rate-limit, insert the placeholder, schedule the stream
+  if (mentionsAI(parsed.body)) {
+    await checkAIRateLimit(user.id)
+
+    const admin = serviceRoleClient()
+    const { data: placeholder, error: phErr } = await admin
+      .from('messages')
+      .insert({
+        channel_id: parsed.channelId,
+        author_kind: 'ai',
+        author_id: null,
+        invoked_by_user_id: user.id,
+        body: '',
+        ai_status: 'streaming',
+      })
+      .select()
+      .single()
+    if (phErr) throw phErr
+
+    after(() =>
+      invokeAI({
+        channelId: parsed.channelId,
+        placeholderId: placeholder.id,
+        invokerName: user.name || 'Teammate',
+      })
+    )
+  }
 
   return { ok: true as const, message: userMsg }
 }
