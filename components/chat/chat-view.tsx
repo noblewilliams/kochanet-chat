@@ -155,6 +155,7 @@ export function ChatView({
       <TypingIndicator typers={typers} />
       <Composer
         channelId={channel.id}
+        members={members}
         connStatus={connStatus}
         onOptimisticSend={(o) => addOptimistic({ ...o, authorId: currentUser.id })}
         onOptimisticFail={markOptimisticFailed}
