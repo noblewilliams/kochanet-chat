@@ -141,14 +141,14 @@ create table channels (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
   type        text not null check (type in ('public', 'private')),
-  created_by  uuid not null,                          -- BetterAuth user id; no FK
+  created_by  text not null,                          -- BetterAuth user id (text/cuid); no FK
   created_at  timestamptz not null default now()
 );
 
 -- Membership + read-receipt pointer
 create table channel_members (
   channel_id    uuid not null references channels(id) on delete cascade,
-  user_id       uuid not null,                        -- BetterAuth user id; no FK
+  user_id       text not null,                        -- BetterAuth user id (text/cuid); no FK
   role          text not null default 'member' check (role in ('owner', 'member')),
   joined_at     timestamptz not null default now(),
   last_read_at  timestamptz not null default now(),   -- Slack-style read receipt
@@ -160,8 +160,8 @@ create table messages (
   id                  uuid primary key default gen_random_uuid(),
   channel_id          uuid not null references channels(id) on delete cascade,
   author_kind         text not null check (author_kind in ('user', 'ai')),
-  author_id           uuid,                           -- BetterAuth user id; NULL for AI rows
-  invoked_by_user_id  uuid,                           -- only set when author_kind='ai'
+  author_id           text,                           -- BetterAuth user id (text/cuid); NULL for AI rows
+  invoked_by_user_id  text,                           -- only set when author_kind='ai'
   body                text not null default '',       -- AI placeholder rows start empty
   client_id           uuid,                           -- optimistic-update dedup key
   ai_status           text check (ai_status in ('streaming', 'complete', 'error')),
@@ -221,7 +221,9 @@ If we do nothing, `auth.uid()` is `null` in every policy. Our RLS either denies 
 
 ### 6.3 Decision: Option A, with a custom JWT claim variant
 
-We mint a JWT with a **custom claim `app_user_id`** instead of mirroring identities into a Supabase `users` table. RLS policies reference `(auth.jwt() ->> 'app_user_id')::uuid` instead of `auth.uid()`. BetterAuth stays the only source of truth for identity — no sync table, no shadow accounts.
+We mint a JWT with a **custom claim `app_user_id`** instead of mirroring identities into a Supabase `users` table. RLS policies reference `auth.jwt() ->> 'app_user_id'` (as text — see footnote) instead of `auth.uid()`. BetterAuth stays the only source of truth for identity — no sync table, no shadow accounts.
+
+> **Footnote on identifier types:** BetterAuth's default schema generator uses **text** IDs (cuid/nanoid format like `r3kJ8x...`), not UUIDs. When this was discovered during implementation we adapted: every user-reference column in the app schema is `text` (not `uuid`), the RLS helper `app_user_id()` returns `text` (no cast), and the JWT custom claim is read as a JSON string. The change is invisible to TypeScript code, which uses `string` regardless. The "trust the JWT" decision (no FK to a users table) is unchanged.
 
 **Why A wins:** Supabase Realtime with per-row RLS is the main reason to be on Supabase in this stack. Option B effectively gives that up. Option C is engineering debt we cannot afford to maintain in 2 days.
 
@@ -286,9 +288,9 @@ alter table channel_members enable row level security;
 alter table messages        enable row level security;
 
 -- Convenience function: extracts our custom claim
-create or replace function app_user_id() returns uuid
+create or replace function app_user_id() returns text
 language sql stable as $$
-  select nullif(current_setting('request.jwt.claims', true)::jsonb ->> 'app_user_id', '')::uuid
+  select nullif(current_setting('request.jwt.claims', true)::jsonb ->> 'app_user_id', '')
 $$;
 
 -- channel_members: each user manages only their own membership rows
