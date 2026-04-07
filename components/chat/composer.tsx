@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef, useTransition } from 'react'
 import { sendMessage } from '@/server/messages'
+import { transcribeAudio } from '@/server/transcribe'
 import type { ConnectionStatus } from '@/lib/realtime/use-connection-state'
 import { MentionAutocomplete } from './mention-autocomplete'
 
@@ -11,16 +12,7 @@ const STATUS_LABEL: Record<ConnectionStatus, { text: string; color: string }> = 
   offline: { text: 'offline', color: 'text-warning' },
 }
 
-type SpeechRecognitionLike = {
-  continuous: boolean
-  interimResults: boolean
-  lang: string
-  onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null
-  onerror: (() => void) | null
-  onend: (() => void) | null
-  start: () => void
-  stop: () => void
-}
+type RecordState = 'idle' | 'recording' | 'transcribing'
 
 export function Composer({
   channelId,
@@ -40,9 +32,11 @@ export function Composer({
   const [value, setValue] = useState('')
   const [pending, start] = useTransition()
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
-  const [recording, setRecording] = useState(false)
+  const [recordState, setRecordState] = useState<RecordState>('idle')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
   const statusLabel = STATUS_LABEL[connStatus]
 
   function computeMention(text: string, caret: number): string | null {
@@ -108,43 +102,98 @@ export function Composer({
     }
   }
 
-  function startVoiceInput() {
-    const w = window as unknown as {
-      SpeechRecognition?: new () => SpeechRecognitionLike
-      webkitSpeechRecognition?: new () => SpeechRecognitionLike
-    }
-    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
-    if (!SR) {
-      alert('Voice input is not supported in this browser. Try Chrome, Edge, or Safari.')
+  async function startRecording() {
+    if (recordState !== 'idle') return
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      alert('Voice input requires a modern browser with microphone access.')
       return
     }
-    const rec = new SR()
-    rec.continuous = false
-    rec.interimResults = true
-    rec.lang = 'en-US'
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
 
-    let finalTranscript = ''
-    rec.onresult = (event) => {
-      let interim = ''
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i]
-        if (res.isFinal) finalTranscript += res[0].transcript
-        else interim += res[0].transcript
+      // Pick a mime type the browser supports — Chrome/Edge default to webm/opus
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ]
+      const mimeType = candidates.find((m) => MediaRecorder.isTypeSupported(m)) || ''
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      recorderRef.current = recorder
+      chunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
       }
-      const combined = `${finalTranscript}${interim}`.trim()
-      if (combined) setValue(combined)
+      recorder.onstop = async () => {
+        // Tear down the mic stream
+        streamRef.current?.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        chunksRef.current = []
+
+        if (blob.size === 0) {
+          setRecordState('idle')
+          return
+        }
+
+        setRecordState('transcribing')
+        try {
+          const ext = (recorder.mimeType || 'audio/webm').split(';')[0].split('/')[1] || 'webm'
+          const file = new File([blob], `recording.${ext}`, { type: blob.type })
+          const formData = new FormData()
+          formData.append('audio', file)
+          const transcript = await transcribeAudio(formData)
+          if (transcript) {
+            setValue((prev) => (prev ? `${prev} ${transcript}` : transcript))
+            requestAnimationFrame(() => textareaRef.current?.focus())
+          }
+        } catch (err) {
+          console.error('transcribe failed', err)
+          alert(`Transcription failed: ${(err as Error).message}`)
+        } finally {
+          setRecordState('idle')
+        }
+      }
+
+      recorder.start()
+      setRecordState('recording')
+    } catch (err) {
+      console.error('mic permission / start failed', err)
+      alert('Could not start voice recording. Check microphone permission.')
+      setRecordState('idle')
     }
-    rec.onerror = () => setRecording(false)
-    rec.onend = () => setRecording(false)
-    rec.start()
-    recognitionRef.current = rec
-    setRecording(true)
   }
 
-  function stopVoiceInput() {
-    recognitionRef.current?.stop()
-    setRecording(false)
+  function stopRecording() {
+    const rec = recorderRef.current
+    if (rec && rec.state !== 'inactive') {
+      rec.stop()
+    }
   }
+
+  function onMicClick() {
+    if (recordState === 'recording') stopRecording()
+    else if (recordState === 'idle') startRecording()
+    // 'transcribing' = ignore clicks until done
+  }
+
+  const micLabel =
+    recordState === 'recording'
+      ? 'Stop recording'
+      : recordState === 'transcribing'
+      ? 'Transcribing…'
+      : 'Start voice input'
+
+  const micBg =
+    recordState === 'recording'
+      ? 'bg-warning'
+      : recordState === 'transcribing'
+      ? 'bg-muted'
+      : 'bg-accent'
 
   return (
     <div className="border-t border-border bg-bg p-4">
@@ -156,9 +205,10 @@ export function Composer({
             onChange={handleChange}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder="Message…"
+            placeholder={recordState === 'transcribing' ? 'Transcribing…' : 'Message…'}
             aria-label="Message input"
-            className="w-full resize-none rounded-lg border border-border bg-surface px-4 py-3 text-white placeholder:text-muted focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/20"
+            disabled={recordState === 'transcribing'}
+            className="w-full resize-none rounded-lg border border-border bg-surface px-4 py-3 text-white placeholder:text-muted focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/20 disabled:opacity-60"
           />
           {mentionQuery !== null && (
             <MentionAutocomplete
@@ -171,23 +221,28 @@ export function Composer({
         </div>
         <button
           type="button"
-          onClick={recording ? stopVoiceInput : startVoiceInput}
-          aria-label={recording ? 'Stop voice input' : 'Start voice input'}
-          className={`grid h-[42px] w-[42px] place-items-center rounded-lg text-bg ${
-            recording ? 'bg-warning' : 'bg-accent'
-          }`}
+          onClick={onMicClick}
+          disabled={recordState === 'transcribing'}
+          aria-label={micLabel}
+          className={`grid h-[42px] w-[42px] place-items-center rounded-lg text-bg disabled:opacity-60 ${micBg}`}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="9" y="2" width="6" height="12" rx="3" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-            <line x1="8" y1="23" x2="16" y2="23" />
-          </svg>
+          {recordState === 'transcribing' ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="2" width="6" height="12" rx="3" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          )}
         </button>
         <button
           type="button"
           onClick={handleSend}
-          disabled={!value.trim() || pending}
+          disabled={!value.trim() || pending || recordState === 'transcribing'}
           aria-label="Send message"
           className="grid h-[42px] w-[42px] place-items-center rounded-lg bg-accent text-bg disabled:opacity-60"
         >
