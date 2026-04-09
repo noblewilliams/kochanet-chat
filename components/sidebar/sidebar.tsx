@@ -32,10 +32,10 @@ export async function Sidebar({ currentUser }: { currentUser: { id: string; name
   const channels = baseChannels.map((c) => ({ ...c, unreadCount: unreadMap.get(c.id) ?? 0 }))
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-bg-lifted">
+    <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-bg-lifted h-full">
       <div className="p-4 border-b border-border">
         <div className="text-xs uppercase tracking-wide text-muted">Workspace</div>
-        <div className="mt-1 font-semibold text-white">Kochanet</div>
+        <div className="mt-1 font-semibold text-white font-heading">Kochanet</div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">

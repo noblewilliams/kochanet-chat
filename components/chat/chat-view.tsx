@@ -61,7 +61,7 @@ export function ChatView({
     <>
       <header className="flex items-center justify-between border-b border-border bg-bg-lifted px-5 py-3 md:pl-5 pl-14">
         <div>
-          <h1 className="font-semibold text-white">
+          <h1 className="font-semibold text-white font-heading">
             <span className="text-muted">{channel.type === 'public' ? '#' : '🔒'}</span>{' '}
             {channel.name}
           </h1>

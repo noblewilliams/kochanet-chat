@@ -88,8 +88,9 @@ export default function SignInPage() {
       <button
         type="button"
         onClick={onGitHub}
-        className="w-full rounded-lg border border-border p-2 text-accent hover:bg-hover"
+        className="w-full flex items-center justify-center gap-2 rounded-lg border border-border p-2 text-accent hover:bg-hover"
       >
+        <img src="/github.svg" alt="" width={18} height={18} className="invert opacity-70" />
         Continue with GitHub
       </button>
 
