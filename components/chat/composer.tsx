@@ -196,7 +196,7 @@ export function Composer({
       : 'bg-accent'
 
   return (
-    <div className="border-t border-border bg-bg px-4 py-3">
+    <div className="border-t border-border bg-bg px-4 py-3 h-[84px] flex flex-col justify-center">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <textarea
