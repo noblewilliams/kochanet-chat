@@ -2,7 +2,7 @@
 
 A real-time team chat with an on-demand AI assistant. Built for the **Kochanet Next.js Developer Test**.
 
-**Live demo:** _(set after deploy)_
+**Live demo:** https://kochanet-chat-dusky.vercel.app/
 
 ## Test credentials
 
