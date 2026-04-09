@@ -1,13 +1,15 @@
--- The "user" table (BetterAuth) is queried by:
---   1. The user-scoped Supabase client (authenticated role) to resolve member names
---   2. BetterAuth's pg Pool (postgres role) for session validation
+-- BetterAuth tables (user, session, account, verification) must NOT have RLS.
 --
--- The policy must allow ALL roles, not just "authenticated", because the
--- postgres role on Supabase is NOT a superuser and does NOT bypass RLS.
--- Restricting to "authenticated" causes BetterAuth's getSession() to fail
--- with 42501 (insufficient_privilege) when it queries the user table.
+-- BetterAuth's pg Pool connects as the "postgres" role, which on Supabase
+-- is NOT a superuser and does NOT bypass RLS. If RLS is enabled on these
+-- tables without a permissive policy for postgres, BetterAuth's getSession()
+-- and signUp() calls fail with 42501 (insufficient_privilege).
+--
+-- These tables were created by @better-auth/cli in 0001_init.sql. Supabase
+-- may auto-enable RLS on new public tables in some configurations — this
+-- migration explicitly disables it to be safe.
 
-alter table "user" enable row level security;
-
-create policy user_select_all on "user" for select
-  using (true);
+alter table "user"         disable row level security;
+alter table "session"      disable row level security;
+alter table "account"      disable row level security;
+alter table "verification" disable row level security;
