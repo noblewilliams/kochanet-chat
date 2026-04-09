@@ -8,14 +8,23 @@ export async function Sidebar({ currentUser }: { currentUser: { id: string; name
   const { data: memberships } = await supabase
     .from('channel_members')
     .select('channel_id, last_read_at, channels(id, name, type)')
+    .eq('user_id', currentUser.id)
     .order('joined_at')
 
-  const baseChannels = (memberships ?? []).map((m) => ({
-    id: m.channel_id,
-    name: (m.channels as unknown as { name: string }).name,
-    type: (m.channels as unknown as { type: 'public' | 'private' }).type,
-    lastReadAt: m.last_read_at,
-  }))
+  // Deduplicate by channel_id (safety net — RLS should already filter to one row per channel)
+  const seen = new Set<string>()
+  const baseChannels = (memberships ?? [])
+    .filter((m) => {
+      if (seen.has(m.channel_id)) return false
+      seen.add(m.channel_id)
+      return true
+    })
+    .map((m) => ({
+      id: m.channel_id,
+      name: (m.channels as unknown as { name: string }).name,
+      type: (m.channels as unknown as { type: 'public' | 'private' }).type,
+      lastReadAt: m.last_read_at,
+    }))
 
   // Compute unread counts in parallel (one count query per channel)
   const unreadEntries = await Promise.all(
