@@ -48,7 +48,7 @@ export async function Sidebar({ currentUser }: { currentUser: { id: string; name
         <ChannelList channels={channels} />
       </div>
 
-      <div className="border-t border-border p-3">
+      <div className="border-t border-border px-3 py-3">
         <div className="text-xs text-muted">Signed in as</div>
         <div className="text-sm text-accent truncate">{currentUser.name}</div>
         <SignOutButton className="mt-2" />
