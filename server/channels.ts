@@ -16,9 +16,14 @@ export async function createChannel(input: { name: string; type: 'public' | 'pri
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) throw new Error('unauthorized')
 
-  const supabase = await createClient()
+  // Use service-role for channel creation to avoid an RLS race condition:
+  // the channels SELECT policy for private channels requires a channel_members
+  // row, but we can't insert the membership until we know the channel id.
+  // With the user-scoped client, .insert().select() fails because the
+  // membership doesn't exist yet at SELECT time.
+  const admin = serviceRoleClient()
 
-  const { data: channel, error } = await supabase
+  const { data: channel, error } = await admin
     .from('channels')
     .insert({
       name: parsed.name,
@@ -30,7 +35,7 @@ export async function createChannel(input: { name: string; type: 'public' | 'pri
   if (error) throw error
 
   // Owner auto-joins as 'owner' role
-  const { error: memberErr } = await supabase
+  const { error: memberErr } = await admin
     .from('channel_members')
     .insert({
       channel_id: channel.id,
