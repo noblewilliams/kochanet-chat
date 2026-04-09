@@ -3,56 +3,72 @@ import { ChannelList } from './channel-list'
 import { NewChannelButton } from './new-channel-button'
 import { SignOutButton } from './sign-out-button'
 
-export async function Sidebar({ currentUser }: { currentUser: { id: string; name: string } }) {
-  const supabase = await createClient()
-  // Two-step fetch to avoid PostgREST embed issues (no FK from user_id to public.user)
-  // Step 1: get this user's memberships
-  const { data: memberships } = await supabase
-    .from('channel_members')
-    .select('channel_id, last_read_at')
-    .eq('user_id', currentUser.id)
-    .order('joined_at')
+type Channel = {
+  id: string
+  name: string
+  type: 'public' | 'private'
+  lastReadAt: string
+  unreadCount: number
+}
 
-  const membershipMap = new Map(
-    (memberships ?? []).map((m) => [m.channel_id, m.last_read_at])
-  )
-  const channelIds = [...membershipMap.keys()]
+async function loadChannels(currentUserId: string): Promise<Channel[]> {
+  try {
+    const supabase = await createClient()
 
-  // Step 2: fetch channel details in one query
-  const { data: channelRows } = channelIds.length
-    ? await supabase.from('channels').select('id, name, type').in('id', channelIds)
-    : { data: [] as Array<{ id: string; name: string; type: 'public' | 'private' }> }
+    const { data: memberships } = await supabase
+      .from('channel_members')
+      .select('channel_id, last_read_at')
+      .eq('user_id', currentUserId)
+      .order('joined_at')
 
-  const baseChannels = (channelRows ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    type: c.type as 'public' | 'private',
-    lastReadAt: membershipMap.get(c.id) ?? new Date().toISOString(),
-  }))
+    const membershipMap = new Map(
+      (memberships ?? []).map((m) => [m.channel_id, m.last_read_at])
+    )
+    const channelIds = [...membershipMap.keys()]
+    if (channelIds.length === 0) return []
 
-  // Compute unread counts — single query for the earliest lastReadAt, then count in JS
-  const earliestReadAt = baseChannels.reduce(
-    (min, c) => (c.lastReadAt < min ? c.lastReadAt : min),
-    baseChannels[0]?.lastReadAt ?? new Date().toISOString()
-  )
-  const { data: unreadRows } = channelIds.length
-    ? await supabase
-        .from('messages')
-        .select('channel_id, created_at')
-        .in('channel_id', channelIds)
-        .gt('created_at', earliestReadAt)
-        .neq('author_id', currentUser.id)
-    : { data: [] as Array<{ channel_id: string; created_at: string }> }
+    const { data: channelRows } = await supabase
+      .from('channels')
+      .select('id, name, type')
+      .in('id', channelIds)
 
-  const unreadMap = new Map<string, number>()
-  for (const c of baseChannels) {
-    const count = (unreadRows ?? []).filter(
-      (r: { channel_id: string; created_at: string }) =>
-        r.channel_id === c.id && r.created_at > c.lastReadAt
-    ).length
-    unreadMap.set(c.id, count)
+    const baseChannels = (channelRows ?? []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type as 'public' | 'private',
+      lastReadAt: membershipMap.get(c.id) ?? new Date().toISOString(),
+    }))
+
+    // Compute unread counts
+    const earliestReadAt = baseChannels.reduce(
+      (min, c) => (c.lastReadAt < min ? c.lastReadAt : min),
+      baseChannels[0]?.lastReadAt ?? new Date().toISOString()
+    )
+    const { data: unreadRows } = await supabase
+      .from('messages')
+      .select('channel_id, created_at')
+      .in('channel_id', channelIds)
+      .gt('created_at', earliestReadAt)
+      .neq('author_id', currentUserId)
+
+    const unreadMap = new Map<string, number>()
+    for (const c of baseChannels) {
+      const count = (unreadRows ?? []).filter(
+        (r: { channel_id: string; created_at: string }) =>
+          r.channel_id === c.id && r.created_at > c.lastReadAt
+      ).length
+      unreadMap.set(c.id, count)
+    }
+
+    return baseChannels.map((c) => ({ ...c, unreadCount: unreadMap.get(c.id) ?? 0 }))
+  } catch (err) {
+    console.error('Sidebar: failed to load channels:', err)
+    return []
   }
-  const channels = baseChannels.map((c) => ({ ...c, unreadCount: unreadMap.get(c.id) ?? 0 }))
+}
+
+export async function Sidebar({ currentUser }: { currentUser: { id: string; name: string } }) {
+  const channels = await loadChannels(currentUser.id)
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-bg-lifted h-full">
