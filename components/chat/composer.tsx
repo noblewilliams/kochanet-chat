@@ -33,7 +33,7 @@ export function Composer({
   const [pending, start] = useTransition()
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [recordState, setRecordState] = useState<RecordState>('idle')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = useRef<HTMLInputElement>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
@@ -94,7 +94,7 @@ export function Composer({
     })
   }
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (mentionQuery !== null) return // popover handles keys
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -196,19 +196,20 @@ export function Composer({
       : 'bg-accent'
 
   return (
-    <div className="border-t border-border bg-bg px-4 py-3 h-[84px] flex flex-col justify-center">
+    <div className="border-t border-border bg-bg px-4 py-3 h-[96px] flex flex-col justify-center">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <textarea
+          <input
             ref={textareaRef}
+            type="text"
             value={value}
-            onChange={handleChange}
+            onChange={(e) => { setValue(e.target.value); onTyping?.(); const caret = e.target.selectionStart ?? e.target.value.length; setMentionQuery(computeMention(e.target.value, caret)); }}
             onKeyDown={onKeyDown}
-            rows={1}
             placeholder={recordState === 'transcribing' ? 'Transcribing…' : 'Message…'}
             aria-label="Message input"
             disabled={recordState === 'transcribing'}
-            className="w-full resize-none rounded-lg border border-border bg-surface px-4 py-2.5 text-white placeholder:text-muted focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/20 disabled:opacity-60 h-[42px]"
+            className="w-full rounded-lg border border-border bg-surface px-4 text-[14px] text-white placeholder:text-muted focus:border-transparent focus:outline-none disabled:opacity-60 h-[44px] focus:border-0 focus:ring-0 [&:focus]:outline-none composer-input"
+            style={{ fontSize: '14px' }}
           />
           {mentionQuery !== null && (
             <MentionAutocomplete
@@ -224,7 +225,7 @@ export function Composer({
           onClick={onMicClick}
           disabled={recordState === 'transcribing'}
           aria-label={micLabel}
-          className={`grid h-[42px] w-[42px] place-items-center rounded-lg text-bg disabled:opacity-60 ${micBg}`}
+          className={`grid h-[44px] w-[44px] place-items-center rounded-lg text-bg disabled:opacity-60 cursor-pointer ${micBg}`}
         >
           {recordState === 'transcribing' ? (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
@@ -244,7 +245,7 @@ export function Composer({
           onClick={handleSend}
           disabled={!value.trim() || pending || recordState === 'transcribing'}
           aria-label="Send message"
-          className="grid h-[42px] w-[42px] place-items-center rounded-lg bg-accent text-bg disabled:opacity-60"
+          className="grid h-[44px] w-[44px] place-items-center rounded-lg bg-accent text-bg disabled:opacity-60 cursor-pointer"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="5" y1="12" x2="19" y2="12" />

@@ -40,3 +40,19 @@
 
 .pulse-dot   { animation: pulse-dot 1.4s ease-in-out infinite; }
 .blink-caret { animation: blink-caret 1s steps(1) infinite; }
+
+/* Gradient focus border for the composer input */
+.composer-input {
+  background-clip: padding-box;
+  transition: border-color 0.15s ease;
+}
+.composer-input:focus {
+  border: 1.5px solid transparent;
+  background-image:
+    linear-gradient(var(--color-surface), var(--color-surface)),
+    linear-gradient(135deg, var(--color-accent), var(--color-accent-deep), #5b7a99);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  outline: none;
+  box-shadow: none;
+}

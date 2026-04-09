@@ -9,6 +9,7 @@ import { AIThinking } from './ai-thinking'
 import { AIMessageBody } from './ai-message-body'
 import { ChannelSearch } from './channel-search'
 import { InviteButton } from './invite-button'
+import { EmptyChannel } from './empty-channel'
 import { TypingIndicator } from '@/components/presence/typing-indicator'
 import { PresenceBar } from '@/components/presence/presence-bar'
 
@@ -84,7 +85,7 @@ export function ChatView({
         aria-label="Messages"
       >
         {messages.length === 0 ? (
-          <p className="text-center text-muted">No messages yet. Say hi.</p>
+          <EmptyChannel channelName={channel.name} />
         ) : (
           <ul className="space-y-3">
             {messages.map((m, i) => {

@@ -48,10 +48,15 @@ export async function Sidebar({ currentUser }: { currentUser: { id: string; name
         <ChannelList channels={channels} />
       </div>
 
-      <div className="border-t border-border px-3 py-3 h-[84px] flex flex-col justify-center">
-        <div className="text-xs text-muted">Signed in as</div>
-        <div className="text-sm text-accent truncate">{currentUser.name}</div>
-        <SignOutButton className="mt-1" />
+      <div className="border-t border-border px-3 py-3 h-[96px] flex items-center gap-3">
+        <div className="h-8 w-8 shrink-0 rounded-full bg-surface grid place-items-center text-xs font-semibold text-accent">
+          {currentUser.name.slice(0, 1).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-white font-medium truncate">{currentUser.name}</div>
+          <div className="text-[10px] text-muted">Online</div>
+        </div>
+        <SignOutButton />
       </div>
     </aside>
   )
