@@ -72,7 +72,7 @@ export function ChatView({
           />
         </div>
         <div className="flex items-center gap-2">
-          <ChannelSearch channelId={channel.id} />
+          <ChannelSearch />
           <InviteButton channelId={channel.id} />
         </div>
       </header>

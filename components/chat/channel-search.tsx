@@ -1,16 +1,25 @@
 'use client'
 import { useState, useTransition, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { searchMessages } from '@/server/messages'
 
-export function ChannelSearch({ channelId }: { channelId: string }) {
+type SearchResult = {
+  id: string
+  body: string
+  created_at: string
+  channel_id: string
+  channelName: string
+}
+
+export function ChannelSearch() {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const [results, setResults] = useState<Array<{ id: string; body: string; created_at: string }>>([])
+  const [results, setResults] = useState<SearchResult[]>([])
   const [pending, start] = useTransition()
   const [searched, setSearched] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const router = useRouter()
 
-  // Keyboard shortcut: Cmd/Ctrl+K to open
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -25,7 +34,6 @@ export function ChannelSearch({ channelId }: { channelId: string }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  // Auto-focus when opened
   useEffect(() => {
     if (open) {
       requestAnimationFrame(() => inputRef.current?.focus())
@@ -39,10 +47,15 @@ export function ChannelSearch({ channelId }: { channelId: string }) {
     e.preventDefault()
     if (!q.trim()) return
     start(async () => {
-      const rows = await searchMessages(channelId, q)
-      setResults(rows.map((r) => ({ id: r.id, body: r.body, created_at: r.created_at })))
+      const rows = await searchMessages(q)
+      setResults(rows)
       setSearched(true)
     })
+  }
+
+  function goToChannel(channelId: string) {
+    setOpen(false)
+    router.push(`/c/${channelId}`)
   }
 
   return (
@@ -51,7 +64,7 @@ export function ChannelSearch({ channelId }: { channelId: string }) {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Search messages"
-        title="Search messages"
+        title="Search messages (⌘K)"
         className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:text-accent hover:bg-hover cursor-pointer transition-colors"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -67,9 +80,9 @@ export function ChannelSearch({ channelId }: { channelId: string }) {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg rounded-xl border border-border bg-bg-lifted shadow-2xl overflow-hidden animate-in fade-in"
+            className="w-full max-w-lg rounded-xl border border-border bg-bg-lifted shadow-2xl overflow-hidden"
           >
-            {/* Search input bar */}
+            {/* Search input */}
             <form onSubmit={onSubmit} className="flex items-center gap-3 px-4 py-3 border-b border-border">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted shrink-0">
                 <circle cx="11" cy="11" r="8" />
@@ -117,7 +130,7 @@ export function ChannelSearch({ channelId }: { channelId: string }) {
 
               {!pending && !searched && !q && (
                 <div className="py-8 text-center">
-                  <p className="text-sm text-muted">Type to search through messages in this channel</p>
+                  <p className="text-sm text-muted">Search across all your channels</p>
                 </div>
               )}
 
@@ -139,13 +152,12 @@ export function ChannelSearch({ channelId }: { channelId: string }) {
                       <li
                         key={r.id}
                         className="px-4 py-3 hover:bg-hover/50 cursor-pointer border-b border-border/30 last:border-0 transition-colors"
-                        onClick={() => setOpen(false)}
+                        onClick={() => goToChannel(r.channel_id)}
                       >
                         <div className="flex items-center gap-2 mb-1">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted shrink-0">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                          </svg>
-                          <span className="text-[10px] text-muted">
+                          <span className="text-[10px] text-muted font-medium"># {r.channelName}</span>
+                          <span className="text-[10px] text-muted/60">·</span>
+                          <span className="text-[10px] text-muted/60">
                             {new Date(r.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                             {' '}
                             {new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -157,25 +169,6 @@ export function ChannelSearch({ channelId }: { channelId: string }) {
                   </ul>
                 </>
               )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-2 border-t border-border text-[10px] text-muted">
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1">
-                  <kbd className="rounded bg-surface px-1 py-0.5 border border-border">↑</kbd>
-                  <kbd className="rounded bg-surface px-1 py-0.5 border border-border">↓</kbd>
-                  navigate
-                </span>
-                <span className="flex items-center gap-1">
-                  <kbd className="rounded bg-surface px-1 py-0.5 border border-border">↵</kbd>
-                  select
-                </span>
-              </div>
-              <span className="flex items-center gap-1">
-                <kbd className="rounded bg-surface px-1 py-0.5 border border-border">⌘K</kbd>
-                search
-              </span>
             </div>
           </div>
         </div>

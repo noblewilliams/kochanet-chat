@@ -88,15 +88,37 @@ export async function loadMessagesBefore(channelId: string, beforeCreatedAt: str
   return (data ?? []).slice().reverse()
 }
 
-export async function searchMessages(channelId: string, query: string) {
+/**
+ * Searches messages across ALL channels the user is a member of.
+ * RLS filters to only channels the user can read.
+ * Returns results with channel name resolved.
+ */
+export async function searchMessages(query: string) {
   if (!query.trim()) return []
   const supabase = await createClient()
   const { data } = await supabase
     .from('messages')
-    .select('*')
-    .eq('channel_id', channelId)
+    .select('id, body, created_at, channel_id')
     .ilike('body', `%${query}%`)
     .order('created_at', { ascending: false })
-    .limit(50)
-  return data ?? []
+    .limit(30)
+
+  const rows = data ?? []
+  if (rows.length === 0) return []
+
+  // Resolve channel names in one batch query
+  const channelIds = [...new Set(rows.map((r) => r.channel_id))]
+  const { data: channels } = await supabase
+    .from('channels')
+    .select('id, name')
+    .in('id', channelIds)
+  const nameById = new Map((channels ?? []).map((c) => [c.id, c.name]))
+
+  return rows.map((r) => ({
+    id: r.id,
+    body: r.body,
+    created_at: r.created_at,
+    channel_id: r.channel_id,
+    channelName: nameById.get(r.channel_id) ?? 'unknown',
+  }))
 }
