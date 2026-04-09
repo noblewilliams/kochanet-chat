@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useTransition } from 'react'
+import { useState, useRef, useTransition, useEffect } from 'react'
 import { sendMessage } from '@/server/messages'
 import { transcribeAudio } from '@/server/transcribe'
 import type { ConnectionStatus } from '@/lib/realtime/use-connection-state'
@@ -38,6 +38,16 @@ export function Composer({
   const chunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
   const statusLabel = STATUS_LABEL[connStatus]
+
+  // Cleanup media stream and recorder if component unmounts mid-recording
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      if (recorderRef.current?.state !== 'inactive') {
+        recorderRef.current?.stop()
+      }
+    }
+  }, [])
 
   function computeMention(text: string, caret: number): string | null {
     const slice = text.slice(0, caret)

@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from './browser'
 import { refreshSupabaseJwt } from '@/server/session'
@@ -16,27 +16,22 @@ export function SupabaseProvider({
   initialJwt: string | null
   children: React.ReactNode
 }) {
-  const [jwt, setJwt] = useState<string | null>(initialJwt)
-  const client = useMemo(() => createBrowserSupabaseClient(jwt), [jwt])
+  // Create the client once — never recreate it on JWT refresh
+  const [client] = useState(() => createBrowserSupabaseClient(initialJwt))
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    if (!jwt) return
+    if (!initialJwt) return
     intervalRef.current = setInterval(async () => {
       const fresh = await refreshSupabaseJwt()
-      setJwt(fresh)
+      if (fresh) {
+        client.realtime.setAuth(fresh)
+      }
     }, REFRESH_INTERVAL_MS)
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [jwt])
-
-  // Propagate the new JWT to the realtime channel if already connected
-  useEffect(() => {
-    if (jwt && client.realtime) {
-      client.realtime.setAuth(jwt)
-    }
-  }, [jwt, client])
+  }, [initialJwt, client])
 
   return <SupabaseContext.Provider value={client}>{children}</SupabaseContext.Provider>
 }

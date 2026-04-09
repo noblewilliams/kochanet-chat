@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const PUBLIC_PATHS = ['/sign-in', '/sign-up']
-const AUTH_COOKIE_NAME = 'better-auth.session_token'
+const AUTH_COOKIE_NAMES = ['__Secure-better-auth.session_token', 'better-auth.session_token']
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Skip static assets and auth API
@@ -15,7 +15,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const hasSession = request.cookies.has(AUTH_COOKIE_NAME)
+  const hasSession = AUTH_COOKIE_NAMES.some((name) => request.cookies.has(name))
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p))
 
   if (!hasSession && !isPublicPath) {

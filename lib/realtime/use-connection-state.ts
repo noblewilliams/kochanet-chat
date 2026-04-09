@@ -9,7 +9,7 @@ export function useConnectionState(): ConnectionStatus {
   const [status, setStatus] = useState<ConnectionStatus>('connecting')
 
   useEffect(() => {
-    const probe = supabase.channel(`connection-probe-${crypto.randomUUID()}`)
+    const probe = supabase.channel('connection-probe')
     probe.subscribe((s) => {
       if (s === 'SUBSCRIBED') setStatus('connected')
       else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') setStatus('reconnecting')

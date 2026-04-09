@@ -1,5 +1,5 @@
 export function TypingIndicator({ typers }: { typers: { name: string }[] }) {
-  if (typers.length === 0) return <div className="h-4" />
+  if (typers.length === 0) return <div className="h-4 mb-[5px]" />
   const names = typers.map((t) => t.name)
   const label =
     names.length === 1
@@ -9,7 +9,7 @@ export function TypingIndicator({ typers }: { typers: { name: string }[] }) {
       : `${names.length} people are typing…`
 
   return (
-    <div className="flex h-4 items-center gap-2 px-5 text-xs text-muted" aria-live="polite">
+    <div className="flex h-4 items-center gap-2 px-5 mb-[5px] text-xs text-muted" aria-live="polite">
       <span className="flex gap-1">
         <span className="h-1 w-1 rounded-full bg-accent pulse-dot" />
         <span className="h-1 w-1 rounded-full bg-accent pulse-dot" style={{ animationDelay: '0.2s' }} />

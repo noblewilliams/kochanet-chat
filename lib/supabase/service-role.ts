@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * The service-role Supabase client bypasses RLS entirely.
@@ -10,12 +10,17 @@ import { createClient } from '@supabase/supabase-js'
  * Any new import of this module is a privilege boundary expansion and should
  * be reviewed accordingly.
  */
+let cached: SupabaseClient | null = null
+
 export function serviceRoleClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: { persistSession: false, autoRefreshToken: false },
-    }
-  )
+  if (!cached) {
+    cached = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+      }
+    )
+  }
+  return cached
 }

@@ -18,19 +18,17 @@ export default async function ChannelPage({
 
   const supabase = await createClient()
 
-  const { data: channel, error } = await supabase
-    .from('channels')
-    .select('id, name, type')
-    .eq('id', channelId)
-    .single()
+  // Fetch channel + membership in parallel (both needed for access check)
+  const [{ data: channel, error }, { data: myMembership }] = await Promise.all([
+    supabase.from('channels').select('id, name, type').eq('id', channelId).single(),
+    supabase
+      .from('channel_members')
+      .select('user_id, last_read_at')
+      .eq('channel_id', channelId)
+      .eq('user_id', session.user.id)
+      .maybeSingle(),
+  ])
   if (error || !channel) return notFound()
-
-  const { data: myMembership } = await supabase
-    .from('channel_members')
-    .select('user_id, last_read_at')
-    .eq('channel_id', channelId)
-    .eq('user_id', session.user.id)
-    .maybeSingle()
 
   if (!myMembership) {
     if (channel.type === 'public') {
@@ -41,22 +39,20 @@ export default async function ChannelPage({
 
   // Capture priorLastReadAt BEFORE bumping it for the "new messages" divider
   const priorLastReadAt = myMembership.last_read_at
-  await updateLastRead(channelId)
 
-  const { data: initialMessages } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('channel_id', channelId)
-    .order('created_at', { ascending: false })
-    .limit(50)
+  // Run remaining queries + updateLastRead in parallel
+  const [{ data: initialMessages }, { data: memberRows }] = await Promise.all([
+    supabase
+      .from('messages')
+      .select('*')
+      .eq('channel_id', channelId)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    supabase.from('channel_members').select('user_id').eq('channel_id', channelId),
+    updateLastRead(channelId),
+  ])
 
   const messages = (initialMessages ?? []).slice().reverse()
-
-  // Two-step member fetch: membership rows then user names (no FK between them)
-  const { data: memberRows } = await supabase
-    .from('channel_members')
-    .select('user_id')
-    .eq('channel_id', channelId)
 
   const userIds = (memberRows ?? []).map((r) => r.user_id)
   const { data: users } = userIds.length

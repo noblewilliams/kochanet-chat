@@ -30,19 +30,28 @@ export async function Sidebar({ currentUser }: { currentUser: { id: string; name
     lastReadAt: membershipMap.get(c.id) ?? new Date().toISOString(),
   }))
 
-  // Compute unread counts in parallel (one count query per channel)
-  const unreadEntries = await Promise.all(
-    baseChannels.map(async (c) => {
-      const { count } = await supabase
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('channel_id', c.id)
-        .gt('created_at', c.lastReadAt)
-        .neq('author_id', currentUser.id)
-      return [c.id, count ?? 0] as const
-    })
+  // Compute unread counts — single query for the earliest lastReadAt, then count in JS
+  const earliestReadAt = baseChannels.reduce(
+    (min, c) => (c.lastReadAt < min ? c.lastReadAt : min),
+    baseChannels[0]?.lastReadAt ?? new Date().toISOString()
   )
-  const unreadMap = new Map(unreadEntries)
+  const { data: unreadRows } = channelIds.length
+    ? await supabase
+        .from('messages')
+        .select('channel_id, created_at')
+        .in('channel_id', channelIds)
+        .gt('created_at', earliestReadAt)
+        .neq('author_id', currentUser.id)
+    : { data: [] as Array<{ channel_id: string; created_at: string }> }
+
+  const unreadMap = new Map<string, number>()
+  for (const c of baseChannels) {
+    const count = (unreadRows ?? []).filter(
+      (r: { channel_id: string; created_at: string }) =>
+        r.channel_id === c.id && r.created_at > c.lastReadAt
+    ).length
+    unreadMap.set(c.id, count)
+  }
   const channels = baseChannels.map((c) => ({ ...c, unreadCount: unreadMap.get(c.id) ?? 0 }))
 
   return (

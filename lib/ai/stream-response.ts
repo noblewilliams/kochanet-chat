@@ -20,11 +20,12 @@ export async function invokeAI(opts: {
   invokerName: string
 }) {
   const supabase = serviceRoleClient()
+  let stream: Awaited<ReturnType<typeof openai.chat.completions.create>> | null = null
 
   try {
     const messages = await buildContext(opts.channelId, opts.invokerName)
 
-    const stream = await openai.chat.completions.create({
+    stream = await openai.chat.completions.create({
       model: AI_MODEL,
       messages,
       stream: true,
@@ -69,5 +70,10 @@ export async function invokeAI(opts: {
         ai_status: 'error',
       })
       .eq('id', opts.placeholderId)
+  } finally {
+    // Ensure the stream's underlying connection is released
+    if (stream && 'controller' in stream) {
+      stream.controller.abort()
+    }
   }
 }

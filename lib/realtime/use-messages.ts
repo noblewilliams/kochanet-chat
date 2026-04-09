@@ -4,6 +4,8 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import { useSupabase } from '@/lib/supabase/supabase-provider'
 import type { Message, MessageRow } from './types'
 
+const MAX_MESSAGES = 500
+
 export function useMessages(channelId: string, initial: MessageRow[]) {
   const supabase = useSupabase()
   const [messages, setMessages] = useState<Message[]>(initial)
@@ -28,7 +30,8 @@ export function useMessages(channelId: string, initial: MessageRow[]) {
       }
       // Plain insert if not already present
       if (prev.some((m) => m.id === row.id)) return prev
-      return [...prev, row]
+      const next = [...prev, row]
+      return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
     })
     if (row.created_at > lastSeenCreatedAtRef.current) {
       lastSeenCreatedAtRef.current = row.created_at
@@ -72,7 +75,8 @@ export function useMessages(channelId: string, initial: MessageRow[]) {
             setMessages((prev) => {
               const existing = new Set(prev.map((m) => m.id))
               const additions = (missed as MessageRow[]).filter((m) => !existing.has(m.id))
-              return [...prev, ...additions]
+              const next = [...prev, ...additions]
+              return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
             })
             lastSeenCreatedAtRef.current = (missed.at(-1) as MessageRow).created_at
           }
