@@ -121,6 +121,14 @@ export function ChannelSearch({ channelId }: { channelId: string }) {
                 </div>
               )}
 
+              {!pending && !searched && q && (
+                <div className="py-6 text-center">
+                  <p className="text-sm text-muted">
+                    Press <kbd className="mx-1 rounded bg-surface px-1.5 py-0.5 text-[11px] text-accent border border-border">↵ Enter</kbd> to search
+                  </p>
+                </div>
+              )}
+
               {!pending && results.length > 0 && (
                 <>
                   <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted border-b border-border/50">
