@@ -205,7 +205,7 @@ export function Composer({
             value={value}
             onChange={(e) => { setValue(e.target.value); onTyping?.(); const caret = e.target.selectionStart ?? e.target.value.length; setMentionQuery(computeMention(e.target.value, caret)); }}
             onKeyDown={onKeyDown}
-            placeholder="Message…"
+            placeholder={recordState === 'transcribing' ? 'Transcribing…' : 'Message…'}
             aria-label="Message input"
             disabled={recordState === 'transcribing'}
             className="w-full rounded-lg border border-border bg-surface px-4 text-[14px] text-white placeholder:text-muted focus:border-transparent focus:outline-none disabled:opacity-60 h-[44px] focus:border-0 focus:ring-0 [&:focus]:outline-none composer-input"
