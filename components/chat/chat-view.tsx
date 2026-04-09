@@ -80,7 +80,7 @@ export function ChatView({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="flex-1 overflow-y-auto px-5 py-4"
+        className={`flex-1 overflow-y-auto px-5 py-4 ${messages.length === 0 ? 'flex flex-col' : ''}`}
         aria-live="polite"
         aria-label="Messages"
       >

@@ -21,10 +21,14 @@ export function ChannelSearch({ channelId }: { channelId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Search channel"
-        className="rounded-lg border border-border px-3 py-1.5 text-xs text-accent hover:bg-hover"
+        aria-label="Search messages"
+        title="Search messages"
+        className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:text-accent hover:bg-hover cursor-pointer transition-colors"
       >
-        🔍 Search
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
       </button>
       {open && (
         <div
