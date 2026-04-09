@@ -190,9 +190,9 @@ export function Composer({
 
   const micBg =
     recordState === 'recording'
-      ? 'bg-warning'
+      ? 'bg-red-500'
       : recordState === 'transcribing'
-      ? 'bg-muted'
+      ? 'bg-accent/60'
       : 'bg-accent'
 
   return (
@@ -205,7 +205,7 @@ export function Composer({
             value={value}
             onChange={(e) => { setValue(e.target.value); onTyping?.(); const caret = e.target.selectionStart ?? e.target.value.length; setMentionQuery(computeMention(e.target.value, caret)); }}
             onKeyDown={onKeyDown}
-            placeholder={recordState === 'transcribing' ? 'Transcribing…' : 'Message…'}
+            placeholder="Message…"
             aria-label="Message input"
             disabled={recordState === 'transcribing'}
             className="w-full rounded-lg border border-border bg-surface px-4 text-[14px] text-white placeholder:text-muted focus:border-transparent focus:outline-none disabled:opacity-60 h-[44px] focus:border-0 focus:ring-0 [&:focus]:outline-none composer-input"
@@ -225,13 +225,23 @@ export function Composer({
           onClick={onMicClick}
           disabled={recordState === 'transcribing'}
           aria-label={micLabel}
-          className={`grid h-[44px] w-[44px] place-items-center rounded-lg text-bg disabled:opacity-60 cursor-pointer ${micBg}`}
+          className={`grid h-[44px] w-[44px] place-items-center rounded-lg text-bg disabled:opacity-60 cursor-pointer transition-colors ${micBg}`}
         >
-          {recordState === 'transcribing' ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
+          {recordState === 'recording' ? (
+            /* Animated sound bars */
+            <div className="flex items-center gap-[3px] h-[18px]">
+              <span className="w-[3px] rounded-full bg-white sound-bar" />
+              <span className="w-[3px] rounded-full bg-white sound-bar" />
+              <span className="w-[3px] rounded-full bg-white sound-bar" />
+              <span className="w-[3px] rounded-full bg-white sound-bar" />
+            </div>
+          ) : recordState === 'transcribing' ? (
+            /* Spinner */
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="animate-spin text-bg">
               <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             </svg>
           ) : (
+            /* Default mic icon */
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="9" y="2" width="6" height="12" rx="3" />
               <path d="M19 10v2a7 7 0 0 1-14 0v-2" />

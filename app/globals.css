@@ -41,6 +41,16 @@
 .pulse-dot   { animation: pulse-dot 1.4s ease-in-out infinite; }
 .blink-caret { animation: blink-caret 1s steps(1) infinite; }
 
+/* Sound bars animation for mic recording state */
+@keyframes sound-bar {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
+.sound-bar { animation: sound-bar 0.8s ease-in-out infinite; }
+.sound-bar:nth-child(2) { animation-delay: 0.15s; }
+.sound-bar:nth-child(3) { animation-delay: 0.3s; }
+.sound-bar:nth-child(4) { animation-delay: 0.45s; }
+
 /* Gradient focus border for the composer input */
 .composer-input {
   background-clip: padding-box;
