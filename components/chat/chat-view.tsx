@@ -107,11 +107,11 @@ export function ChatView({
                   )}
                   <li className="flex gap-3">
                     {m.author_kind === 'ai' ? (
-                      <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-accent to-accent-deep grid place-items-center text-bg font-bold">
+                      <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-accent to-accent-deep grid place-items-center text-bg text-xs">
                         ✦
                       </div>
                     ) : (
-                      <div className="h-8 w-8 shrink-0 rounded-full bg-surface grid place-items-center text-xs font-semibold text-accent">
+                      <div className="h-7 w-7 shrink-0 rounded-full bg-surface grid place-items-center text-[11px] font-semibold text-accent">
                         {(nameById.get(m.author_id ?? '') ?? '?').slice(0, 1).toUpperCase()}
                       </div>
                     )}
