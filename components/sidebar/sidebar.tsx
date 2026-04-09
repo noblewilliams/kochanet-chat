@@ -5,26 +5,30 @@ import { SignOutButton } from './sign-out-button'
 
 export async function Sidebar({ currentUser }: { currentUser: { id: string; name: string } }) {
   const supabase = await createClient()
+  // Two-step fetch to avoid PostgREST embed issues (no FK from user_id to public.user)
+  // Step 1: get this user's memberships
   const { data: memberships } = await supabase
     .from('channel_members')
-    .select('channel_id, last_read_at, channels(id, name, type)')
+    .select('channel_id, last_read_at')
     .eq('user_id', currentUser.id)
     .order('joined_at')
 
-  // Deduplicate by channel_id (safety net — RLS should already filter to one row per channel)
-  const seen = new Set<string>()
-  const baseChannels = (memberships ?? [])
-    .filter((m) => {
-      if (seen.has(m.channel_id)) return false
-      seen.add(m.channel_id)
-      return true
-    })
-    .map((m) => ({
-      id: m.channel_id,
-      name: (m.channels as unknown as { name: string }).name,
-      type: (m.channels as unknown as { type: 'public' | 'private' }).type,
-      lastReadAt: m.last_read_at,
-    }))
+  const membershipMap = new Map(
+    (memberships ?? []).map((m) => [m.channel_id, m.last_read_at])
+  )
+  const channelIds = [...membershipMap.keys()]
+
+  // Step 2: fetch channel details in one query
+  const { data: channelRows } = channelIds.length
+    ? await supabase.from('channels').select('id, name, type').in('id', channelIds)
+    : { data: [] as Array<{ id: string; name: string; type: 'public' | 'private' }> }
+
+  const baseChannels = (channelRows ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    type: c.type as 'public' | 'private',
+    lastReadAt: membershipMap.get(c.id) ?? new Date().toISOString(),
+  }))
 
   // Compute unread counts in parallel (one count query per channel)
   const unreadEntries = await Promise.all(
