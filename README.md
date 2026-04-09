@@ -61,11 +61,11 @@ This trades ~30–50 DB writes per AI response for a **single** realtime channel
 ### Authentication and authorization
 
 - **BetterAuth** with email/password + GitHub OAuth. Session is a cookie (`better-auth.session_token`).
-- **`proxy.ts`** (Next.js 16 renamed `middleware.ts` to `proxy.ts`) is a cheap cookie-presence check that redirects between `(auth)` and `(app)` route groups. The authoritative session check happens server-side in `lib/supabase/server.ts` via `auth.api.getSession()`.
+- **`middleware.ts`** is a cheap cookie-presence check that redirects between `(auth)` and `(app)` route groups. The authoritative session check happens server-side in `lib/supabase/server.ts` via `auth.api.getSession()`.
 - **The JWT bridge:** `mintSupabaseJwt(betterAuthUserId)` signs a Supabase-compatible JWT with `SUPABASE_JWT_SECRET`, embeds the BetterAuth user id as the custom claim `app_user_id`, valid 1 hour.
 - **RLS policies** reference `nullif(current_setting('request.jwt.claims', true)::jsonb ->> 'app_user_id', '')` (returned as `text` — see schema note below). The policies are in `supabase/migrations/0002_rls.sql`.
 - The browser gets a fresh JWT on initial page load (passed through `SupabaseProvider`) and refreshes it via a server action every 50 minutes.
-- **The service-role client is only imported by `lib/ai/stream-response.ts`, `server/ai.ts`, `server/channels.ts` (for invites), and `supabase/seed.ts`.** Every other path is user-scoped. Auditing the import list audits the entire bypass surface.
+- **The service-role client is only imported by `lib/ai/stream-response.ts`, `lib/ai/build-context.ts`, `server/ai.ts`, `server/channels.ts` (for invites), and `supabase/seed.ts`.** Every other path is user-scoped. Auditing the import list audits the entire bypass surface.
 
 ### Schema notes
 
@@ -78,7 +78,7 @@ This trades ~30–50 DB writes per AI response for a **single** realtime channel
 app/                    Next.js App Router
 ├── (auth)/             sign-in and sign-up pages (route group)
 ├── (app)/              authenticated shell (route group)
-│   └── c/[channelId]/  individual channel page
+│   └── c/[channelId]/  individual channel page (+ loading + error boundaries)
 └── api/auth/[...all]/  BetterAuth catch-all mount
 components/             React components (chat, sidebar, presence)
 lib/
@@ -87,9 +87,9 @@ lib/
 ├── ai/                 OpenAI client, system prompt, context builder, streaming continuation
 ├── realtime/           useMessages, usePresence, useTyping, useConnectionState
 └── utils/              mention detection, thinking verbs
-server/                 server actions (messages, channels, ai, session)
-supabase/migrations/    schema and RLS policies
-docs/superpowers/       design spec and implementation plan
+server/                 server actions (messages, channels, ai, session, transcribe)
+supabase/migrations/    schema, RLS policies, and access grants (0001–0004)
+middleware.ts           cookie-based route protection
 ```
 
 ### Component structure
@@ -145,9 +145,9 @@ pnpm dev
 - **Unread badges update on navigation, not live.** The sidebar is a server component. A live sidebar would need a second realtime subscription. Deferred.
 - **No automated tests for UI components.** Business logic (JWT bridge, mention detection, rate limiter, context builder) has Vitest unit tests (`pnpm test`). UI was smoke-tested manually.
 - **Rate limiting is per-user by Postgres count**, not Redis token bucket. Fine for a demo.
-- **The service-role insert path for AI messages is a privilege boundary.** It's isolated to one file (`lib/supabase/service-role.ts`) which is only imported by `lib/ai/stream-response.ts`, `server/ai.ts`, `server/channels.ts` (invites), and the seed script. Reviewing that import list is reviewing the entire bypass surface.
+- **The service-role insert path for AI messages is a privilege boundary.** It's isolated to one file (`lib/supabase/service-role.ts`) which is only imported by `lib/ai/stream-response.ts`, `lib/ai/build-context.ts`, `server/ai.ts`, `server/channels.ts` (invites), and the seed script. Reviewing that import list is reviewing the entire bypass surface.
 - **Tailwind v4** — `tailwind.config.ts` doesn't exist; design tokens live in `app/globals.css` as a `@theme` block. This is the v4 idiom but differs from many tutorials.
-- **Spec was written for Next.js 15 with uuid user IDs.** Implementation surfaced two adaptations: (1) Next.js 16 renamed `middleware.ts` to `proxy.ts` and the function name from `middleware` to `proxy`; (2) BetterAuth's `cli generate` produces `text` user IDs not `uuid`, so the app schema uses `text` for user-reference columns. Both are documented in the spec footnotes.
+- **Spec was written for Next.js 15 with uuid user IDs.** Implementation surfaced two adaptations: (1) Next.js 16 initially renamed `middleware.ts` to `proxy.ts`, but we reverted to the standard `middleware.ts` for broader compatibility; (2) BetterAuth's `cli generate` produces `text` user IDs not `uuid`, so the app schema uses `text` for user-reference columns. Both are documented in the spec footnotes.
 
 ## What I would do with more time
 
@@ -183,5 +183,5 @@ Unit tests cover:
 2. **The BetterAuth ↔ Supabase JWT bridge** (~2 min) — the most non-obvious decision. Open `lib/auth/supabase-jwt.ts`, explain the custom claim, show `lib/supabase/server.ts` attaching it, show the RLS policy in `0002_rls.sql` referencing it. Explain what was rejected (service-role-only loses Realtime; parallel auth systems are sync hell).
 3. **Real-time topology** (~1.5 min) — one global Postgres Changes subscription, RLS-filtered. Broadcast for typing. Presence for online. Open `lib/realtime/use-messages.ts` and show the subscription + gap-fill + optimistic reconciliation in one file.
 4. **The AI flow** (~2 min) — the architectural payoff. Open `server/messages.ts` and walk through `sendMessage` → placeholder insert → `after()` continuation. Open `lib/ai/stream-response.ts` and explain the batched UPDATE loop. **Emphasize that AI streaming reuses the same realtime channel as new messages — there is only one WebSocket in the entire app.**
-5. **Tradeoffs and surprises** (~1 min) — voice via Web Speech, BetterAuth's text IDs (vs the spec's assumed uuid), Tailwind v4 instead of v3, no automated UI tests, sidebar unread is not live. Point at the "What I would do with more time" section.
+5. **Tradeoffs and surprises** (~1 min) — voice via Groq Whisper (instead of Web Speech API — better accuracy, works in Firefox), BetterAuth's text IDs (vs the spec's assumed uuid), Tailwind v4 instead of v3, no automated UI tests, sidebar unread is not live. Point at the "What I would do with more time" section.
 6. **Challenges** (~0.5 min) — the BetterAuth RLS mismatch and how it was solved with custom claims was the most interesting problem.
