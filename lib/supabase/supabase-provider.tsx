@@ -22,6 +22,10 @@ export function SupabaseProvider({
 
   useEffect(() => {
     if (!initialJwt) return
+    // Authenticate the Realtime WebSocket immediately so RLS policies
+    // can resolve app_user_id() from the JWT claims on first connect.
+    client.realtime.setAuth(initialJwt)
+
     intervalRef.current = setInterval(async () => {
       const fresh = await refreshSupabaseJwt()
       if (fresh) {
