@@ -29,7 +29,7 @@ export function ChatView({
   members: Member[]
   currentUser: { id: string; name: string }
 }) {
-  const { messages, addOptimistic, markOptimisticFailed } = useMessages(
+  const { messages, addOptimistic, confirmOptimistic, markOptimisticFailed } = useMessages(
     channel.id,
     initialMessages
   )
@@ -165,6 +165,7 @@ export function ChatView({
         members={members}
         connStatus={connStatus}
         onOptimisticSend={(o) => addOptimistic({ ...o, authorId: currentUser.id })}
+        onOptimisticConfirm={confirmOptimistic}
         onOptimisticFail={markOptimisticFailed}
         onTyping={notifyTyping}
       />

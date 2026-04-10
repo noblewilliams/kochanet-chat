@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef, useTransition, useEffect } from 'react'
 import { sendMessage } from '@/server/messages'
+import type { MessageRow } from '@/lib/supabase/types'
 import { transcribeAudio } from '@/server/transcribe'
 import type { ConnectionStatus } from '@/lib/realtime/use-connection-state'
 import { MentionAutocomplete } from './mention-autocomplete'
@@ -19,6 +20,7 @@ export function Composer({
   members = [],
   connStatus = 'connected',
   onOptimisticSend,
+  onOptimisticConfirm,
   onOptimisticFail,
   onTyping,
 }: {
@@ -26,6 +28,7 @@ export function Composer({
   members?: { id: string; name: string }[]
   connStatus?: ConnectionStatus
   onOptimisticSend?: (opts: { clientId: string; body: string }) => void
+  onOptimisticConfirm?: (clientId: string, serverRow: MessageRow) => void
   onOptimisticFail?: (clientId: string) => void
   onTyping?: () => void
 }) {
@@ -92,7 +95,8 @@ export function Composer({
 
     start(async () => {
       try {
-        await sendMessage({ channelId, body, clientId })
+        const result = await sendMessage({ channelId, body, clientId })
+        onOptimisticConfirm?.(clientId, result.message)
       } catch (err) {
         console.error('sendMessage failed', err)
         const name = (err as Error).name

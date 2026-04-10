@@ -108,6 +108,20 @@ export function useMessages(channelId: string, initial: MessageRow[]) {
     [channelId]
   )
 
+  const confirmOptimistic = useCallback((clientId: string, serverRow: MessageRow) => {
+    setMessages((prev) => {
+      const idx = prev.findIndex(
+        (m) => m._optimistic === 'sending' && m.client_id === clientId
+      )
+      if (idx >= 0) {
+        const next = prev.slice()
+        next[idx] = { ...serverRow }
+        return next
+      }
+      return prev
+    })
+  }, [])
+
   const markOptimisticFailed = useCallback((clientId: string) => {
     setMessages((prev) =>
       prev.map((m) =>
@@ -118,5 +132,5 @@ export function useMessages(channelId: string, initial: MessageRow[]) {
     )
   }, [])
 
-  return { messages, setMessages, addOptimistic, markOptimisticFailed }
+  return { messages, setMessages, addOptimistic, confirmOptimistic, markOptimisticFailed }
 }
