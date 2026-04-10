@@ -53,7 +53,7 @@ export default async function ChannelPage({
     supabase.from('channel_members').select('user_id').eq('channel_id', channelId),
   ])
 
-  after(() => updateLastRead(channelId))
+  after(() => updateLastRead(channelId, session.user.id))
 
   const messages = (initialMessages ?? []).slice().reverse()
 

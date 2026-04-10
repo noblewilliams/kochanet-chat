@@ -66,16 +66,13 @@ export async function joinChannel(channelId: string) {
   revalidatePath('/', 'layout')
 }
 
-export async function updateLastRead(channelId: string) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session) return
-
-  const supabase = await createClient()
-  await supabase
+export async function updateLastRead(channelId: string, userId: string) {
+  const admin = serviceRoleClient()
+  await admin
     .from('channel_members')
     .update({ last_read_at: new Date().toISOString() })
     .eq('channel_id', channelId)
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
 
   revalidatePath('/', 'layout')
 }
