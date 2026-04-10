@@ -76,6 +76,8 @@ export async function updateLastRead(channelId: string) {
     .update({ last_read_at: new Date().toISOString() })
     .eq('channel_id', channelId)
     .eq('user_id', session.user.id)
+
+  revalidatePath('/', 'layout')
 }
 
 export async function inviteMember(input: { channelId: string; email: string }) {
