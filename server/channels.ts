@@ -1,5 +1,6 @@
 'use server'
 import { headers } from 'next/headers'
+import { after } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { auth } from '@/lib/auth/better-auth'
@@ -77,7 +78,9 @@ export async function updateLastRead(channelId: string) {
     .eq('channel_id', channelId)
     .eq('user_id', session.user.id)
 
-  revalidatePath('/', 'layout')
+  after(() => {
+    revalidatePath('/', 'layout')
+  })
 }
 
 export async function inviteMember(input: { channelId: string; email: string }) {
