@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { headers } from 'next/headers'
+import { after } from 'next/server'
 import { auth } from '@/lib/auth/better-auth'
 import { createClient } from '@/lib/supabase/server'
 import { ChatView } from '@/components/chat/chat-view'
@@ -40,7 +41,8 @@ export default async function ChannelPage({
   // Capture priorLastReadAt BEFORE bumping it for the "new messages" divider
   const priorLastReadAt = myMembership.last_read_at
 
-  // Run remaining queries + updateLastRead in parallel
+  // Run remaining queries in parallel; defer updateLastRead to after the
+  // response so the sidebar renders with the pre-read unread counts first.
   const [{ data: initialMessages }, { data: memberRows }] = await Promise.all([
     supabase
       .from('messages')
@@ -49,8 +51,9 @@ export default async function ChannelPage({
       .order('created_at', { ascending: false })
       .limit(50),
     supabase.from('channel_members').select('user_id').eq('channel_id', channelId),
-    updateLastRead(channelId),
   ])
+
+  after(() => updateLastRead(channelId))
 
   const messages = (initialMessages ?? []).slice().reverse()
 
